@@ -2,15 +2,15 @@
 FROM eclipse-temurin:17-jdk AS builder
 WORKDIR /app
 
-# Copy Gradle wrapper and settings first (so dependencies can be cached)
+# Copy Gradle wrapper and config first (for dependency caching)
 COPY gradlew .
 COPY gradle ./gradle
 COPY build.gradle settings.gradle ./
 
-# Download dependencies (this will be cached unless build.gradle changes)
-RUN ./gradlew --no-daemon dependencies || true
+# Download dependencies (will be cached unless build.gradle changes)
+RUN ./gradlew build --no-daemon -x test || true
 
-# Now copy source code
+# Copy source code
 COPY src ./src
 
 # Build the jar
