@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_REPO = "docker.io/dharshini644/spring-boot-sample-gradle"
         IMAGE_TAG = "v${BUILD_NUMBER}"
-        CLUSTER_NAME = "spring"                // your EKS cluster name
+        CLUSTER_NAME = "spring-cluster"
         AWS_REGION = "ap-southeast-2"
         NAMESPACE = "sample-app-namespace"
         DEPLOYMENT_NAME = "sample-springboot-app"
@@ -13,39 +13,46 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', 
-                    url: 'https://github.com/Dharshini644/Day6.git',
-                    credentialsId: 'github-creds'
+                git branch: 'main', url: 'https://github.com/Dharshini644/Day6.git'
             }
         }
 
         stage('Build & Push Docker Image') {
             steps {
                 script {
-                    docker.withRegistry('', 'docker-creds') {
-                        def app = docker.build("${DOCKER_REPO}:${IMAGE_TAG}")
-                        app.push()
-                        app.push("latest")
-                    }
+                    sh """
+                    echo "🔨 Building Docker image..."
+                    docker build -t ${DOCKER_REPO}:${IMAGE_TAG} .
+                    
+                    echo "🔑 Logging in to Docker Hub..."
+                    echo "\$DOCKERHUB_PASS" | docker login -u "\$DOCKERHUB_USER" --password-stdin
+
+                    echo "📤 Pushing image to Docker Hub..."
+                    docker push ${DOCKER_REPO}:${IMAGE_TAG}
+
+                    echo "📌 Tagging and pushing 'latest'..."
+                    docker tag ${DOCKER_REPO}:${IMAGE_TAG} ${DOCKER_REPO}:latest
+                    docker push ${DOCKER_REPO}:latest
+                    """
                 }
             }
         }
 
         stage('Deploy to EKS') {
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', 
                                   credentialsId: 'aws-creds']]) {
                     sh """
-                    # Update kubeconfig for EKS
+                    echo "🔧 Updating kubeconfig..."
                     aws eks update-kubeconfig --name ${CLUSTER_NAME} --region ${AWS_REGION}
 
-                    # Update deployment image
+                    echo "🚀 Deploying to Kubernetes..."
                     kubectl set image deployment/${DEPLOYMENT_NAME} \
                         ${DEPLOYMENT_NAME}=${DOCKER_REPO}:${IMAGE_TAG} \
                         -n ${NAMESPACE} --record
 
-                    # Wait for rollout to complete
-                    kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} --timeout=180s
+                    echo "⏳ Waiting for rollout..."
+                    kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} --timeout=120s
                     """
                 }
             }
