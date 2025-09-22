@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_REPO = "docker.io/dharshini644/spring-boot-sample-gradle"
         IMAGE_TAG = "v${BUILD_NUMBER}"
-        CLUSTER_NAME = "spring"
+        CLUSTER_NAME = "spring"                // your EKS cluster name
         AWS_REGION = "ap-southeast-2"
         NAMESPACE = "sample-app-namespace"
         DEPLOYMENT_NAME = "sample-springboot-app"
@@ -13,17 +13,18 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/your-username/your-repo.git'
+                git branch: 'main', 
+                    url: 'https://github.com/Dharshini644/spring-boot-sample-gradle.git',
+                    credentialsId: 'github-creds'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build & Push Docker Image') {
             steps {
                 script {
-                    docker.withRegistry('', 'dockerhub-creds') {
+                    docker.withRegistry('', 'docker-creds') {
                         def app = docker.build("${DOCKER_REPO}:${IMAGE_TAG}")
                         app.push()
-                        // optional: also push "latest"
                         app.push("latest")
                     }
                 }
@@ -32,14 +33,19 @@ pipeline {
 
         stage('Deploy to EKS') {
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', 
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
                                   credentialsId: 'aws-creds']]) {
                     sh """
+                    # Update kubeconfig for EKS
                     aws eks update-kubeconfig --name ${CLUSTER_NAME} --region ${AWS_REGION}
+
+                    # Update deployment image
                     kubectl set image deployment/${DEPLOYMENT_NAME} \
                         ${DEPLOYMENT_NAME}=${DOCKER_REPO}:${IMAGE_TAG} \
                         -n ${NAMESPACE} --record
-                    kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} --timeout=120s
+
+                    # Wait for rollout to complete
+                    kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} --timeout=180s
                     """
                 }
             }
