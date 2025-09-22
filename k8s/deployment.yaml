@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-springboot-app
+  namespace: sample-app-namespace
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sample-springboot-app
+  template:
+    metadata:
+      labels:
+        app: sample-springboot-app
+    spec:
+      containers:
+        - name: sample-springboot-app
+          image: docker.io/dharshini644/spring-boot-sample-gradle:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-springboot-service
+  namespace: sample-app-namespace
+spec:
+  selector:
+    app: sample-springboot-app
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: LoadBalancer
