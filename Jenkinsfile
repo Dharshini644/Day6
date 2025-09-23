@@ -13,9 +13,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/Dharshini644/Day6.git',
-                    credentialsId: 'github-creds'
+                git branch: 'main', url: 'https://github.com/Dharshini644/Day6.git', credentialsId: 'github-creds'
             }
         }
 
