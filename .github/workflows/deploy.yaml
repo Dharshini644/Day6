@@ -1,0 +1,62 @@
+name: Build and Deploy to EKS
+
+on:
+  push:
+    branches:
+      - main   # run when code is pushed to main
+  workflow_dispatch:   # manual trigger
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      DOCKER_REPO: docker.io/dharshini644/spring-boot-sample-gradle
+      CLUSTER_NAME: spring-cluster
+      AWS_REGION: ap-southeast-2
+      NAMESPACE: sample-app-namespace
+      DEPLOYMENT_NAME: sample-springboot-app
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build JAR with Gradle
+        run: ./gradlew clean bootJar --no-daemon
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_PASS }}
+
+      - name: Build and Push Docker image
+        run: |
+          IMAGE_TAG=v${{ github.run_number }}
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          docker build -t $DOCKER_REPO:$IMAGE_TAG -t $DOCKER_REPO:latest .
+          docker push $DOCKER_REPO:$IMAGE_TAG
+          docker push $DOCKER_REPO:latest
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
+
+      - name: Deploy to EKS
+        run: |
+          kubectl set image deployment/$DEPLOYMENT_NAME \
+            $DEPLOYMENT_NAME=$DOCKER_REPO:${{ env.IMAGE_TAG }} \
+            -n $NAMESPACE --record
+          kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE --timeout=120s
