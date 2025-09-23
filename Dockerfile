@@ -6,9 +6,13 @@ WORKDIR /app
 COPY gradlew .
 COPY gradle ./gradle
 COPY build.gradle settings.gradle ./
+COPY gradle/wrapper ./gradle/wrapper
 
-# Download dependencies (will be cached unless build.gradle changes)
-RUN ./gradlew build --no-daemon -x test || true
+# Make gradlew executable
+RUN chmod +x gradlew
+
+# Download dependencies (only)
+RUN ./gradlew dependencies --no-daemon || true
 
 # Copy source code
 COPY src ./src
@@ -20,7 +24,7 @@ RUN ./gradlew clean bootJar --no-daemon
 FROM eclipse-temurin:17-jre-focal
 WORKDIR /app
 
-# Copy the fat jar from builder
+# Copy the fat jar from builder stage
 COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
